@@ -1,0 +1,58 @@
+# OpenClaw Gateway connection settings for AgentAugi
+#
+# The OpenClaw Gateway (127.0.0.1:18789) is the ACP session manager and
+# plugin host that sits between Nerve (task management UI) and AgentAugi
+# (workflow evolution engine).  See ARCHITECTURE_INTEGRATION.md §3b for
+# the full integration design.
+#
+# Usage:
+#   from evoagentx.integrations import OpenClawBridge, OpenClawConfig
+#   import yaml
+#   with open("configs/openclaw.yaml") as f:
+#       raw = yaml.safe_load(f)
+#   cfg = OpenClawConfig(**raw["gateway"])
+#   bridge = OpenClawBridge(cfg)
+
+gateway:
+  host: "127.0.0.1"
+  port: 18789
+
+  # Bearer token — must match openclaw.json gateway.auth.token.
+  # Override via OPENCLAW_TOKEN environment variable in production.
+  token: "${OPENCLAW_TOKEN:-1f395f598aa066b3cf47fbf9d93ff630}"
+
+  # Timeout settings (seconds)
+  timeout_connect: 10.0
+  timeout_read: 30.0
+  timeout_total: 300.0
+
+  # Retry policy — mirrors error-recovery-config.json (network policy)
+  max_retries: 3
+  retry_backoff: 2.0
+
+  # Background heartbeat interval (seconds)
+  heartbeat_interval: 30.0
+
+# Agent-type → AugiVector LLM profile mapping.
+# These correspond to the virtual model names registered in openclaw.json
+# under models.augivector (base URL: http://localhost:3000/v1).
+#
+# Profile "code"     → DeepSeek Chat / Reasoner
+# Profile "research" → Kimi K2.5 (256K context)
+# Profile "auto"     → AugiVector intelligent routing
+llm_profiles:
+  general:   "auto"
+  researcher: "research"
+  analyst:   "research"
+  writer:    "auto"
+  reviewer:  "auto"
+
+# Maximum concurrent tasks submitted via submit_batch().
+# Must not exceed openclaw.json acp.maxConcurrentSessions (8).
+concurrency:
+  max_concurrent_tasks: 8
+
+# Logging
+logging:
+  level: "INFO"
+  include_workflow_trace: true

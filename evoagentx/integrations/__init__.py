@@ -7,6 +7,7 @@ from .aceforge_connector import (
     ImportResult,
     SyncResult,
 )
+from .openclaw_bridge import OpenClawBridge, OpenClawConfig, OpenClawTask, OpenClawResult
 
 __all__ = [
     "AceForgeConnector",
@@ -14,4 +15,8 @@ __all__ = [
     "ExportResult",
     "ImportResult",
     "SyncResult",
+    "OpenClawBridge",
+    "OpenClawConfig",
+    "OpenClawTask",
+    "OpenClawResult",
 ]
