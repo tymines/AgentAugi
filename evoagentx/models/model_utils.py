@@ -10,14 +10,14 @@ from .model_configs import LLMConfig
 from ..models.base_model import BaseLLM 
 
 def get_openai_model_cost() -> dict:
-    import json 
-    from importlib.resources import files
-    # import importlib.resources
-    # with importlib.resources.open_text('litellm', 'model_prices_and_context_window_backup.json') as f:
-    #     model_cost = json.load(f)
-    json_path = files('litellm') / 'model_prices_and_context_window_backup.json' 
-    model_cost = json.loads(json_path.read_text(encoding="utf-8"))
-    return model_cost
+    import json
+    try:
+        from importlib.resources import files
+        json_path = files('litellm') / 'model_prices_and_context_window_backup.json'
+        model_cost = json.loads(json_path.read_text(encoding="utf-8"))
+        return model_cost
+    except (ImportError, FileNotFoundError, Exception):
+        return {}
 
 def infer_litellm_company_from_model(model: str) -> str:
 

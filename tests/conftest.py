@@ -20,16 +20,37 @@ import types
 # like ``from google.auth.transport.requests import Request`` succeed silently.
 # ---------------------------------------------------------------------------
 
+class _StubBase:
+    """A permissive base class returned by stubs so that subclasses compile.
+
+    Accepts any __init__ arguments so that ``super().__init__(...)`` from
+    user-defined subclasses does not raise TypeError.
+    """
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+
 class _AnyStub(types.ModuleType):
-    """Recursive stub: attribute accesses return child stubs."""
+    """Recursive stub: attribute accesses return more stubs.
+
+    Supports patterns like::
+
+        from google.auth.transport.requests import Request   # module attr
+        class Foo(SomeLibraryBaseClass): ...                 # base class
+
+    """
 
     def __init__(self, name: str) -> None:
         super().__init__(name)
         self.__path__ = []
         self.__package__ = name.rsplit(".", 1)[0] if "." in name else name
-        # torch's inspect.getfile() path requires __file__ to be set; without it
-        # torch._library raises "is a built-in module" TypeError.
         self.__file__ = f"<stub:{name}>"
+        # Python 3.14 import machinery may access __spec__; provide a no-op spec.
+        self.__spec__ = importlib.machinery.ModuleSpec(name=name, loader=None)
 
     def __getattr__(self, item: str):
         child_name = f"{self.__name__}.{item}"
@@ -45,6 +66,33 @@ class _AnyStub(types.ModuleType):
 
     def __bool__(self):
         return False
+
+    def __mro_entries__(self, bases):
+        # Allow ``class Foo(stub_attr): ...`` to resolve cleanly using the
+        # permissive _StubBase that accepts arbitrary __init__ kwargs.
+        return (_StubBase,)
+
+    def __class_getitem__(cls, item):
+        return cls
+
+    def __getitem__(self, item):
+        return _AnyStub(f"{self.__name__}[{item}]")
+
+    def __setitem__(self, key, value):
+        pass
+
+    def __delitem__(self, key):
+        pass
+
+    def __len__(self):
+        return 0
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        # Allow _AnyStub instances to be used as Pydantic field annotations.
+        # Treat them as the 'any' type so validation always passes.
+        from pydantic_core import core_schema
+        return core_schema.any_schema()
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +136,75 @@ _ALWAYS_OPTIONAL = [
     "docker",
     "flux",
     "openai_image",
+    # Model providers / optional AI SDKs
+    "dashscope",
+    "ollama",
+    "voyageai",
+    # litellm IS now installed — do not stub it
+    # "litellm",
+    "textgrad",
+    "dspy",
+    "anthropic",
+    # openai IS installed — do not stub it
+    # "openai",
+    # Vector stores / search
+    # faiss IS now installed — do not stub it
+    # "faiss",
+    "chromadb",
+    "pinecone",
+    "weaviate",
+    "cohere",
+    "sentence_transformers",
+    # Graph / Neo4j
+    "neo4j",
+    # Databases
+    "psycopg2",
+    "pymongo",
+    "motor",
+    "bson",
+    "supabase",
+    # Web / browser
+    "selenium",
+    "webdriver_manager",
+    "browser_use",
+    "browser_use_py310x",
+    # Data / ML
+    "torch",
+    # datasets IS now installed — do not stub it
+    # "datasets",
+    # tiktoken IS installed — do not stub it
+    # "tiktoken",
+    # networkx IS installed — do not stub it
+    # "networkx",
+    "tkinter",
+    "_tkinter",
+    "cloudpickle",
+    "optuna",
+    # regex IS now installed — do not stub it
+    # "regex",
+    # Document processing
+    "PyPDF2",
+    "pymupdf",
+    "openpyxl",
+    "reportlab",
+    # Web / scraping
+    "feedparser",
+    "googlesearch",
+    "html2text",
+    "wikipedia",
+    "ddgs",
+    # Python tools / syntax
+    # tree_sitter and tree_sitter_python ARE installed — do not stub them
+    # "tree_sitter",
+    # "tree_sitter_python",
+    # Auth
+    "passlib",
+    "google_auth_oauthlib",
+    "googleapiclient",
+    # Other
+    "overdue",
+    "fastmcp",
+    "telethon",
 ]
 
 # Conditionally optional: Google client libraries may or may not be installed
@@ -102,6 +219,19 @@ _GOOGLE_CHAIN = [
 
 # Conditionally optional: llama_index sub-packages that may be absent
 _LLAMA_INDEX_OPTIONAL = [
+    # llama_index.core IS now installed — do not stub it
+    # "llama_index",
+    # "llama_index.core",
+    # "llama_index.core.schema",
+    "llama_index.core.node_parser",
+    "llama_index.core.indices",
+    "llama_index.core.storage",
+    "llama_index.core.vector_stores",
+    "llama_index.core.retrievers",
+    "llama_index.core.query_engine",
+    "llama_index.core.response_synthesizers",
+    "llama_index.core.embeddings",
+    "llama_index.core.llms",
     "llama_index.embeddings.azure_openai",
     "llama_index.embeddings.openai",
     "llama_index.embeddings.huggingface",

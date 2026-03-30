@@ -31,6 +31,12 @@ from .debate import (
     DebatePosition,
     make_heterogeneous_debaters,
 )
+from .tool_grounded_debate import (
+    ToolGroundedDebateEvaluator,
+    ToolGroundedDebateResult,
+    ToolGroundedDebateConfig,
+    GroundedArgument,
+)
 
 __all__ = [
     "Evaluator",
@@ -62,4 +68,9 @@ __all__ = [
     "DebaterConfig",
     "DebatePosition",
     "make_heterogeneous_debaters",
+    # Phase 3 extension — Tool-MAD
+    "ToolGroundedDebateEvaluator",
+    "ToolGroundedDebateResult",
+    "ToolGroundedDebateConfig",
+    "GroundedArgument",
 ]

@@ -128,3 +128,7 @@ workflows/
 workflows.db 
 evaluation_pipeline/checkpoints/ 
 evaluation_pipeline/results/
+
+# Claude Code worktrees and venv
+.claude/
+.venv-test/

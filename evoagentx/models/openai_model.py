@@ -25,7 +25,8 @@ class OpenAILLM(BaseLLM):
             "gemini_key", "meta_llama_key", "openrouter_key", "openrouter_base", "perplexity_key", 
             "groq_key"
         ] # parameters in OpenAILLMConfig that are not OpenAI models' input parameters 
-        if self.config.model not in get_openai_model_cost():
+        cost_table = get_openai_model_cost()
+        if cost_table and self.config.model not in cost_table:
             raise KeyError(f"'{self.config.model}' is not a valid OpenAI model name!")
     
     def _init_client(self, config: OpenAILLMConfig):
