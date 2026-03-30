@@ -1,0 +1,63 @@
+# Nerve HITL Integration Configuration
+# ---------------------------------------------------------------------------
+# Connection settings for the Nerve kanban REST API.
+# Override with environment variables or pass a NerveConfig object directly.
+#
+# Environment variable substitution: use ${VAR_NAME} syntax.
+# ---------------------------------------------------------------------------
+
+nerve:
+  # Base URL of your Nerve instance.
+  # Local default (no auth required):
+  base_url: "http://localhost:3080"
+
+  # API route prefix for kanban endpoints.
+  api_prefix: "/api/kanban"
+
+  # Authentication (leave blank for local / trusted deployments).
+  # For remote Nerve instances bound to 0.0.0.0, supply either:
+  #   api_key  — sent as "Authorization: Bearer <key>" header
+  #   password — used to obtain a signed-cookie session via POST /api/auth/login
+  api_key: ""
+  password: ""
+
+  # Default labels applied to every HITL task created in Nerve.
+  default_labels:
+    - "evoagentx"
+    - "hitl"
+    - "auto-generated"
+
+  # Value shown in the "created by" field on Nerve tasks.
+  created_by: "evoagentx"
+
+  # HTTP retry settings.
+  max_retries: 3
+  retry_backoff_seconds: 2.0
+
+  # Per-request HTTP timeout (seconds).
+  request_timeout: 10.0
+
+# ---------------------------------------------------------------------------
+# Approval thresholds — control which changes require human sign-off.
+# ---------------------------------------------------------------------------
+thresholds:
+  # Score-delta (as a fraction of score_before) below which a change is
+  # classified as MINOR and auto-approved unconditionally.
+  # Example: 0.02 = 2 % relative improvement.
+  minor_delta: 0.02
+
+  # Score-delta at or above which a change is classified as MAJOR and always
+  # routed to a human reviewer in Nerve.
+  # Example: 0.10 = 10 % relative improvement.
+  major_delta: 0.10
+
+  # When True, MODERATE changes (between minor and major) are also
+  # auto-approved without creating a Nerve task.
+  auto_approve_moderate: false
+
+  # How long (seconds) to poll Nerve for a human decision before giving up.
+  # 3600 = 1 hour.  Set to a shorter value in non-interactive / CI contexts.
+  poll_timeout_seconds: 3600.0
+
+  # How often (seconds) to check Nerve for a status change.
+  poll_interval_seconds: 15.0

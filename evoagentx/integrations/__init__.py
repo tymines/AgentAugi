@@ -8,6 +8,17 @@ from .aceforge_connector import (
     SyncResult,
 )
 from .openclaw_bridge import OpenClawBridge, OpenClawConfig, OpenClawTask, OpenClawResult
+from .nerve_hitl import (
+    NerveHITL,
+    NerveConfig,
+    EvolutionProposal,
+    ProposalStatus,
+    ChangeClassification,
+    ApprovalThresholds,
+    NerveTaskPriority,
+    NerveAPIError,
+    ApprovalTimeoutError,
+)
 
 __all__ = [
     "AceForgeConnector",
@@ -19,4 +30,13 @@ __all__ = [
     "OpenClawConfig",
     "OpenClawTask",
     "OpenClawResult",
+    "NerveHITL",
+    "NerveConfig",
+    "EvolutionProposal",
+    "ProposalStatus",
+    "ChangeClassification",
+    "ApprovalThresholds",
+    "NerveTaskPriority",
+    "NerveAPIError",
+    "ApprovalTimeoutError",
 ]
