@@ -1,0 +1,109 @@
+# Nightly Evolution Configuration
+# Controls the overnight HyperOptimizer evolution run.
+# All paths are relative to the AgentAugi repo root unless absolute.
+
+# ---------------------------------------------------------------------------
+# Evolution parameters
+# ---------------------------------------------------------------------------
+evolution:
+  # Number of evolutionary generations to run each night
+  generations: 20
+
+  # Population size maintained per generation
+  population_size: 8
+
+  # Genetic operator probabilities
+  mutation_rate: 0.35
+  crossover_rate: 0.25
+
+  # Tournament size for parent selection
+  tournament_size: 3
+
+  # Max task evaluations per genome per generation
+  evaluation_budget: 50
+
+  # Fitness metric key returned by the evaluation function
+  fitness_metric: "accuracy"
+
+# ---------------------------------------------------------------------------
+# LLM used as the meta-optimizer (mutation / crossover prompts)
+# ---------------------------------------------------------------------------
+meta_llm:
+  # Provider prefix understood by LiteLLM / the AgentAugi model registry.
+  # Examples: "openai/gpt-4o", "anthropic/claude-sonnet-4-6", "ollama/llama3"
+  model: "anthropic/claude-haiku-4-5"
+
+  # Temperature for mutation / crossover generation (lower = more conservative)
+  temperature: 0.7
+
+  # Hard ceiling on tokens the meta-LLM may generate per call
+  max_tokens: 1024
+
+# ---------------------------------------------------------------------------
+# Budget enforcement via CostTracker
+# ---------------------------------------------------------------------------
+budget:
+  # Maximum spend (USD) for the entire overnight run.
+  # The run aborts cleanly when this is reached.
+  max_usd: 10.00
+
+  # Warn (log + notification) when spend exceeds this fraction of max_usd
+  warn_fraction: 0.75
+
+# ---------------------------------------------------------------------------
+# Persistence paths
+# ---------------------------------------------------------------------------
+paths:
+  # Population state saved/loaded here (HyperOptimizer JSON)
+  population_state: "data/evolution/population_state.json"
+
+  # JitRL memory persistence
+  jitrl_state: "data/evolution/jitrl_memory.json"
+
+  # PlanCache persistence
+  plan_cache: "data/evolution/plan_cache.json"
+
+  # Where evolution reports land (directory)
+  reports_dir: "data/evolution/reports"
+
+  # Lock file — prevents concurrent runs
+  lock_file: "/tmp/agentaugi_nightly_evolution.lock"
+
+# ---------------------------------------------------------------------------
+# Seed optimizers
+# Names of BaseOptimizer subclasses to seed the initial population.
+# These are resolved from evoagentx.optimizers at runtime.
+# ---------------------------------------------------------------------------
+seed_optimizers:
+  - "SEWOptimizer"
+  - "MAPElitesOptimizer"
+  - "TextGradOptimizer"
+  - "GEPAOptimizer"
+
+# ---------------------------------------------------------------------------
+# Notification
+# ---------------------------------------------------------------------------
+notification:
+  # "slack", "file", or "none"
+  backend: "file"
+
+  # Slack: set SLACK_WEBHOOK_URL env var, or provide url here
+  slack:
+    webhook_url: ""        # overridden by SLACK_WEBHOOK_URL env var
+    channel: "#agentaugi-evolution"
+    username: "AgentAugi Evolution Bot"
+    icon_emoji: ":dna:"
+
+  # File: append a one-line summary to this path on completion
+  file:
+    path: "data/evolution/notifications.log"
+
+# ---------------------------------------------------------------------------
+# Scheduler hint (used by install_cron.sh)
+# ---------------------------------------------------------------------------
+schedule:
+  # Standard cron expression — default: 2:00 AM every night
+  cron: "0 2 * * *"
+
+  # Timeout in minutes; the script sends SIGTERM after this
+  timeout_minutes: 240
