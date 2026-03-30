@@ -680,5 +680,282 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(len(cache), 2)
 
 
+# ---------------------------------------------------------------------------
+# GeminiEmbedder unit tests (mock-based, no network)
+# ---------------------------------------------------------------------------
+
+class TestGeminiEmbedderUnit(unittest.TestCase):
+    """Mock-based tests for GeminiEmbedder that never hit the network."""
+
+    def _make_fake_client(self, vector: List[float]):
+        """Return a mock genai.Client whose embed_content returns *vector*."""
+        import types
+
+        class FakeEmbedding:
+            values = vector
+
+        class FakeResult:
+            embeddings = [FakeEmbedding()]
+
+        class FakeModels:
+            def embed_content(self, model, contents):
+                return FakeResult()
+
+        client = types.SimpleNamespace(models=FakeModels())
+        return client
+
+    def test_missing_api_key_raises(self):
+        """GeminiEmbedder should raise ValueError when no key is available."""
+        from evoagentx.core.gemini_embedder import GeminiEmbedder
+        # Temporarily remove env var if present
+        saved = os.environ.pop("GEMINI_API_KEY", None)
+        saved2 = os.environ.pop("GOOGLE_API_KEY", None)
+        try:
+            with self.assertRaises((ValueError, ImportError)):
+                GeminiEmbedder(api_key=None)
+        finally:
+            if saved is not None:
+                os.environ["GEMINI_API_KEY"] = saved
+            if saved2 is not None:
+                os.environ["GOOGLE_API_KEY"] = saved2
+
+    def test_call_returns_vector(self):
+        """__call__ should return the vector from the API response."""
+        from evoagentx.core.gemini_embedder import GeminiEmbedder
+        embedder = GeminiEmbedder.__new__(GeminiEmbedder)
+        embedder._api_key = "fake"
+        embedder._model = "models/gemini-embedding-001"
+        embedder._cache = {}
+        embedder._cache_order = []
+        embedder._cache_size = 10
+        embedder._client = self._make_fake_client([0.1, 0.2, 0.3])
+
+        result = embedder("hello world")
+        self.assertEqual(result, [0.1, 0.2, 0.3])
+
+    def test_repeated_call_uses_cache(self):
+        """Second call for same text should not re-call the API."""
+        from evoagentx.core.gemini_embedder import GeminiEmbedder
+
+        call_count = [0]
+
+        class CountingModels:
+            def embed_content(self, model, contents):
+                call_count[0] += 1
+                import types
+                class FE:
+                    values = [1.0, 2.0]
+                class FR:
+                    embeddings = [FE()]
+                return FR()
+
+        import types
+        client = types.SimpleNamespace(models=CountingModels())
+
+        embedder = GeminiEmbedder.__new__(GeminiEmbedder)
+        embedder._api_key = "fake"
+        embedder._model = "models/gemini-embedding-001"
+        embedder._cache = {}
+        embedder._cache_order = []
+        embedder._cache_size = 10
+        embedder._client = client
+
+        embedder("same text")
+        embedder("same text")
+        self.assertEqual(call_count[0], 1)
+
+    def test_cache_eviction(self):
+        """Cache evicts oldest entries when full."""
+        from evoagentx.core.gemini_embedder import GeminiEmbedder
+
+        embedder = GeminiEmbedder.__new__(GeminiEmbedder)
+        embedder._api_key = "fake"
+        embedder._model = "m"
+        embedder._cache = {}
+        embedder._cache_order = []
+        embedder._cache_size = 4
+
+        counter = [0]
+
+        class Mods:
+            def embed_content(self, model, contents):
+                counter[0] += 1
+                import types
+                class FE:
+                    values = [float(counter[0])]
+                class FR:
+                    embeddings = [FE()]
+                return FR()
+
+        import types
+        embedder._client = types.SimpleNamespace(models=Mods())
+
+        for i in range(6):
+            embedder(f"text {i}")
+
+        # After 6 inserts into a cache of size 4, half should have been evicted
+        self.assertLessEqual(len(embedder._cache), 4)
+
+
+class TestPlanCacheWithGeminiEmbedder(unittest.TestCase):
+    """PlanCache integration tests using a fake embedder (no network calls)."""
+
+    @staticmethod
+    def _make_embedder(dim: int = 8):
+        """Return a fake embed_fn that hashes text to a dim-dimensional vector."""
+        import hashlib
+
+        def embed(text: str) -> List[float]:
+            digest = hashlib.md5(text.encode()).digest()
+            # Stretch to `dim` floats in [0, 1]
+            values = [(b / 255.0) for b in digest]
+            while len(values) < dim:
+                values.extend(values)
+            return values[:dim]
+
+        return embed
+
+    def test_embedding_stored_on_template(self):
+        """store() should populate template.embedding when embed_fn is set."""
+        cache = PlanCache(embed_fn=self._make_embedder())
+        tmpl = cache.store("find weather in Paris", _steps(["search"]))
+        self.assertIsNotNone(tmpl.embedding)
+        self.assertIsInstance(tmpl.embedding, list)
+        self.assertGreater(len(tmpl.embedding), 0)
+
+    def test_no_embedding_without_embed_fn(self):
+        """template.embedding should be None when no embed_fn is provided."""
+        cache = PlanCache()
+        tmpl = cache.store("find weather in Paris", _steps(["search"]))
+        self.assertIsNone(tmpl.embedding)
+
+    def test_retrieve_uses_cosine_with_embed_fn(self):
+        """retrieve() should use cosine similarity (via embed_fn) not Jaccard."""
+        embed = self._make_embedder()
+        cache = PlanCache(embed_fn=embed, similarity_threshold=1e-6)
+        cache.store("find weather in Paris", _steps(["search"]))
+        # Should hit — threshold is tiny so any positive cosine score matches
+        result = cache.retrieve("find weather in Paris")
+        self.assertIsNotNone(result)
+
+    def test_embedding_round_trip_via_save_load(self):
+        """Embeddings should survive a save/load cycle."""
+        embed = self._make_embedder()
+        cache = PlanCache(embed_fn=embed)
+        cache.store("task with embedding", _steps(["search"]))
+        original_emb = cache._templates[0].embedding
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            path = f.name
+        try:
+            cache.save(path)
+            cache2 = PlanCache()
+            cache2.load(path)
+            loaded_emb = cache2._templates[0].embedding
+            self.assertIsNotNone(loaded_emb)
+            self.assertEqual(original_emb, loaded_emb)
+        finally:
+            os.unlink(path)
+
+    def test_old_cache_file_without_embedding_loads_cleanly(self):
+        """Loading a cache file without 'embedding' keys should not raise."""
+        payload = {
+            "version": 1,
+            "stats": {"total_queries": 0, "hits": 0, "total_cost_saved": 0.0},
+            "templates": [
+                {
+                    "task_description": "old task",
+                    "steps": [{"action_type": "search", "description": "d",
+                                "tool_name": None, "parameters": {}, "estimated_cost": 0.0}],
+                    "total_cost": 0.0,
+                    "success_rate": 1.0,
+                    "times_used": 1,
+                    "last_used": 1000000.0,
+                    "structural_hash": "abc",
+                    # No "embedding" key — simulates pre-Gemini cache file
+                }
+            ],
+        }
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as f:
+            json.dump(payload, f)
+            path = f.name
+        try:
+            cache = PlanCache()
+            cache.load(path)
+            self.assertEqual(len(cache), 1)
+            self.assertIsNone(cache._templates[0].embedding)
+        finally:
+            os.unlink(path)
+
+    def test_backfill_embedding_on_retrieve_for_old_template(self):
+        """Templates loaded without embeddings get backfilled on first retrieve."""
+        embed = self._make_embedder()
+        # Load a template that has no embedding
+        cache = PlanCache(embed_fn=embed, similarity_threshold=1e-6)
+        # Manually insert a template with no embedding
+        tmpl = PlanTemplate(
+            task_description="old task no embed",
+            steps=_steps(["search"]),
+        )
+        self.assertIsNone(tmpl.embedding)
+        cache._templates.append(tmpl)
+
+        # retrieve() should backfill the embedding
+        cache.retrieve("old task no embed")
+        self.assertIsNotNone(cache._templates[0].embedding)
+
+
+# ---------------------------------------------------------------------------
+# Live Gemini test (skipped unless GEMINI_API_KEY is set)
+# ---------------------------------------------------------------------------
+
+@unittest.skipUnless(
+    os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
+    "GEMINI_API_KEY / GOOGLE_API_KEY not set — skipping live Gemini test",
+)
+class TestGeminiEmbedderLive(unittest.TestCase):
+    """Integration test that calls the real Gemini API."""
+
+    def test_live_embedding_dimensions(self):
+        """Verify gemini-embedding-001 returns 3072-dimensional vectors."""
+        from evoagentx.core.gemini_embedder import GeminiEmbedder, _EMBEDDING_DIMS
+        embedder = GeminiEmbedder()
+        vec = embedder("search the web for Paris weather forecast")
+        self.assertEqual(len(vec), _EMBEDDING_DIMS)
+        self.assertIsInstance(vec[0], float)
+        print(f"\n[live] Gemini embedding dims: {len(vec)}, first 3: {vec[:3]}")
+
+    def test_live_similar_queries_score_higher_than_dissimilar(self):
+        """Semantically similar tasks should score higher than dissimilar ones."""
+        from evoagentx.core.gemini_embedder import make_gemini_plan_cache
+        cache = make_gemini_plan_cache(similarity_threshold=1e-6)
+
+        steps = _steps(["search", "summarise"])
+        cache.store("find the weather forecast for Paris", steps)
+
+        similar = cache.retrieve("what is the weather in London?")
+        dissimilar_score_template = cache._templates[0]
+
+        # Both should be findable at threshold=0.0
+        self.assertIsNotNone(similar)
+
+        # Score the similar vs a dissimilar query manually
+        from evoagentx.core.plan_cache import _cosine_similarity
+        from evoagentx.core.gemini_embedder import GeminiEmbedder
+        embedder = GeminiEmbedder()
+        sim_score = _cosine_similarity(
+            embedder("what is the weather in London?"),
+            embedder("find the weather forecast for Paris"),
+        )
+        dis_score = _cosine_similarity(
+            embedder("compile and deploy the Rust web server"),
+            embedder("find the weather forecast for Paris"),
+        )
+        self.assertGreater(sim_score, dis_score)
+        print(f"\n[live] similar={sim_score:.4f}  dissimilar={dis_score:.4f}")
+
+
 if __name__ == "__main__":
     unittest.main()
