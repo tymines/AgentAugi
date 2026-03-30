@@ -93,5 +93,8 @@ dev = [
 Homepage = "https://github.com/tymines/AgentAugi"
 Repository = "https://github.com/tymines/AgentAugi"
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [tool.setuptools.packages.find]
 where = ["."]
