@@ -1,0 +1,49 @@
+# AceForge ↔ EvoSkill Integration Configuration
+# ------------------------------------------------
+# Settings for AceForgeConnector (evoagentx/integrations/aceforge_connector.py).
+#
+# Path values support ~ expansion.  Any key can be overridden via an
+# environment variable prefixed with ACEFORGE_CONNECTOR_ and uppercased
+# (e.g. ACEFORGE_CONNECTOR_DRY_RUN=true).
+
+connector:
+  # Path to AceForge's working directory.
+  # AceForge writes patterns.jsonl and gap candidates here.
+  forge_dir: ~/.openclaw/workspace/.forge
+
+  # Path to AceForge's deployed skills directory.
+  # Crystallised SKILL.md files land here after approval.
+  skills_dir: ~/.openclaw/workspace/skills
+
+  # File name (inside forge_dir) where EvoSkill writes exported gaps.
+  # AceForge's gap-detect engine reads this on its next cycle.
+  external_gaps_file: evoskill_gaps.jsonl
+
+  # File name (inside forge_dir) where AceForge writes evolution requests.
+  # The connector reads and deletes this file after each sync cycle.
+  evolution_trigger_file: evoskill_trigger.json
+
+  # How often (seconds) an external sync loop should call run_sync().
+  # Set to 0 to disable automatic triggering and drive syncs manually.
+  sync_interval_seconds: 30
+
+  # When true, all file-write operations are logged but never executed.
+  # Useful for validating configuration before enabling live integration.
+  dry_run: false
+
+import_settings:
+  # AceForge uses integer severity scores (typically 1–300+).
+  # This value is used to normalise those scores into the [0, 1] range
+  # that EvoSkill's severity field expects.
+  max_severity_aceforge: 100.0
+
+  # Minimum AceForge severity score for a gap candidate to be imported.
+  # Candidates with severity below this value are silently skipped.
+  # Raise this to reduce noise; lower it to be more sensitive to weak signals.
+  min_aceforge_severity: 3.0
+
+export_settings:
+  # Minimum EvoSkill validation score (0–1) for a SkillDiscovery to be
+  # exported as an AceForge SKILL.md proposal.
+  # Discoveries below this threshold are not written to disk.
+  validation_threshold: 0.6
