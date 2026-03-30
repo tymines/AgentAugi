@@ -87,6 +87,9 @@ class PlanTemplate:
         last_used: Unix timestamp of the most recent retrieval.
         structural_hash: Deterministic hash of the action-type / tool sequence.
             Pre-computed for fast grouping.
+        embedding: Optional pre-computed embedding of ``task_description``.
+            Populated by :class:`PlanCache` when an ``embed_fn`` is configured,
+            eliminating redundant API calls during retrieval.
     """
 
     task_description: str
@@ -96,6 +99,7 @@ class PlanTemplate:
     times_used: int = 0
     last_used: float = field(default_factory=time.time)
     structural_hash: str = ""
+    embedding: Optional[List[float]] = field(default=None)
 
     def __post_init__(self) -> None:
         if not self.structural_hash:
@@ -286,6 +290,19 @@ class PlanCache:
             last_used=time.time(),
             structural_hash=struct_hash,
         )
+
+        # Pre-compute embedding so retrieve() can use cosine similarity
+        # without a redundant API call per template per query.
+        if self._embed_fn is not None:
+            try:
+                tmpl.embedding = self._embed_fn(task_description)
+            except Exception as exc:
+                logger.warning(
+                    "PlanCache: failed to pre-compute embedding for %r — %s",
+                    task_description[:50],
+                    exc,
+                )
+
         self._templates.append(tmpl)
         logger.debug(
             "PlanCache: stored new template (total=%d) for %r",
@@ -330,8 +347,18 @@ class PlanCache:
         best_template: Optional[PlanTemplate] = None
         best_score: float = threshold - 1e-9  # must strictly exceed threshold
 
+        # Pre-compute query embedding once; reuse for every template comparison.
+        query_embedding: Optional[List[float]] = None
+        if self._embed_fn is not None:
+            try:
+                query_embedding = self._embed_fn(task_description)
+            except Exception as exc:
+                logger.warning(
+                    "PlanCache: embed_fn failed on query, falling back to Jaccard — %s", exc
+                )
+
         for tmpl in active:
-            score = self._description_similarity(task_description, tmpl.task_description)
+            score = self._score_template(task_description, tmpl, query_embedding)
             if score > best_score:
                 best_score = score
                 best_template = tmpl
@@ -559,18 +586,43 @@ class PlanCache:
         ]
         return active
 
-    def _description_similarity(self, text_a: str, text_b: str) -> float:
-        """Compute task description similarity using embed_fn or Jaccard."""
-        if self._embed_fn is not None:
+    def _score_template(
+        self,
+        query: str,
+        tmpl: "PlanTemplate",
+        query_embedding: Optional[List[float]],
+    ) -> float:
+        """Score one template against the query.
+
+        Uses cosine similarity when ``query_embedding`` is available (and
+        the template has a cached embedding).  Falls back to Jaccard
+        otherwise.
+
+        Args:
+            query: The incoming task description string.
+            tmpl: The template to score.
+            query_embedding: Pre-computed embedding of *query*, or ``None``
+                if embedding is unavailable / failed.
+
+        Returns:
+            Similarity score in [0.0, 1.0].
+        """
+        if query_embedding is not None:
+            # Use cached template embedding when available.
+            if tmpl.embedding is not None:
+                return _cosine_similarity(query_embedding, tmpl.embedding)
+            # Template stored before embed_fn was configured — compute on-the-fly.
             try:
-                emb_a = self._embed_fn(text_a)
-                emb_b = self._embed_fn(text_b)
-                return _cosine_similarity(emb_a, emb_b)
+                tmpl_emb = self._embed_fn(tmpl.task_description)  # type: ignore[misc]
+                tmpl.embedding = tmpl_emb  # backfill cache
+                return _cosine_similarity(query_embedding, tmpl_emb)
             except Exception as exc:
                 logger.warning(
-                    "PlanCache: embed_fn failed, falling back to Jaccard — %s", exc
+                    "PlanCache: embed_fn failed on template %r — %s",
+                    tmpl.task_description[:50],
+                    exc,
                 )
-        return _jaccard_similarity(text_a, text_b)
+        return _jaccard_similarity(query, tmpl.task_description)
 
     def _record_miss(self) -> None:
         logger.debug("PlanCache: miss (total_queries=%d)", self._total_queries)
@@ -660,7 +712,7 @@ def _lcs_length(seq_a: List[str], seq_b: List[str]) -> int:
 
 def _template_to_dict(tmpl: PlanTemplate) -> Dict[str, Any]:
     """Convert a PlanTemplate to a JSON-serialisable dict."""
-    return {
+    d: Dict[str, Any] = {
         "task_description": tmpl.task_description,
         "steps": [
             {
@@ -678,6 +730,11 @@ def _template_to_dict(tmpl: PlanTemplate) -> Dict[str, Any]:
         "last_used": tmpl.last_used,
         "structural_hash": tmpl.structural_hash,
     }
+    # Only serialise the embedding when it was computed — keeps file size
+    # manageable for large caches that don't use embeddings.
+    if tmpl.embedding is not None:
+        d["embedding"] = tmpl.embedding
+    return d
 
 
 def _template_from_dict(d: Dict[str, Any]) -> PlanTemplate:
@@ -700,6 +757,7 @@ def _template_from_dict(d: Dict[str, Any]) -> PlanTemplate:
         times_used=d.get("times_used", 0),
         last_used=d.get("last_used", time.time()),
         structural_hash=d.get("structural_hash", _compute_structural_hash(steps)),
+        embedding=d.get("embedding"),  # None for old cache files without embeddings
     )
 
 

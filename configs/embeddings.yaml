@@ -1,0 +1,31 @@
+# Embedding settings for PlanCache semantic similarity
+#
+# Usage:
+#   from evoagentx.core.gemini_embedder import make_gemini_plan_cache
+#   import yaml
+#   with open("configs/embeddings.yaml") as f:
+#       cfg = yaml.safe_load(f)["plan_cache"]
+#   cache = make_gemini_plan_cache(**cfg)
+
+plan_cache:
+  # Gemini embedding model.
+  # models/gemini-embedding-001 — 3072 dims, production-ready
+  # models/gemini-embedding-2-preview — experimental next-gen
+  model: "models/gemini-embedding-001"
+
+  # API key — read from GEMINI_API_KEY env var at runtime.
+  # Never commit a literal key here.
+  api_key: "${GEMINI_API_KEY}"
+
+  # Cosine similarity threshold for a cache hit (0–1).
+  # 0.80 is appropriate for Gemini embeddings; Jaccard default is 0.75.
+  similarity_threshold: 0.80
+
+  # Maximum number of plan templates to retain.
+  max_templates: 500
+
+  # Template TTL in seconds.  null = no expiry.
+  ttl_seconds: null
+
+  # In-memory embedding cache size (number of text→vector pairs).
+  embedder_cache_size: 1000
