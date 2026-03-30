@@ -3,13 +3,13 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "evoagentx"
+name = "agentaugi"
 version = "0.1.0"
-description = "A framework for evolving agentic workflows with LLMs."
+description = "Self-evolving AI agents with MASTER search, HyperAgents meta-optimization, speculative execution, and JitRL learning. Forked from EvoAgentX."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [{name = "EvoAgentX Team", email = "evoagentx.ai@gmail.com"}]
+authors = [{name = "Augi Team"}]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -90,9 +90,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/EvoAgentX/EvoAgentX"
-Documentation = "https://EvoAgentX.github.io/EvoAgentX/"
-Repository = "https://github.com/EvoAgentX/EvoAgentX"
+Homepage = "https://github.com/tymines/AgentAugi"
+Repository = "https://github.com/tymines/AgentAugi"
 
 [tool.setuptools.packages.find]
 where = ["."]
